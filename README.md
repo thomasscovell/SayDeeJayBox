@@ -29,6 +29,12 @@ This project is split into two main components:
 *   Power Supply for the Raspberry Pi
 *   NFC Tags (NTAG213 or compatible)
 
+### Recommended 3D-Printed Case
+
+For a compact and tidy setup, this 3D-printed case is designed to fit the Raspberry Pi 3B+ and a POE HAT, but it also perfectly accommodates the NFC HAT mentioned above.
+
+*   **File:** [Raspberry Pi 3B+ PoE Case on Printables.com](https://www.printables.com/model/1073303-raspberry-pi-3b-poe-case/files)
+
 ## Software Setup
 
 This project requires setting up both a web server component and the physical Raspberry Pi jukebox.
@@ -76,9 +82,61 @@ The Raspberry Pi is the physical "jukebox" that reads the NFC tags.
         ```
 4.  **Run the Script:**
     *   Copy the `jukebox.py` script to your Raspberry Pi.
-    *   To have it run automatically on boot, it's recommended to set it up as a `systemd` service.
 
-For a complete, step-by-step guide on setting up the Raspberry Pi, see `pi_setup.html`.
+5.  **Run on Boot as a Service:**
+    This will ensure the Python script starts automatically when the Pi is powered on.
+
+    1.  On the Pi, create the main application file and name it `jukebox.py`:
+        ```bash
+        nano jukebox.py
+        ```
+    2.  Copy and paste the code from the `jukebox.py` section above into the editor.
+    3.  Save and exit (`Ctrl+X`, `Y`, `Enter`).
+    4.  You can test the script by running it directly:
+        ```bash
+        python3 jukebox.py
+        ```
+    5.  Tapping a tag should print the URL it found and a success message. Once you've confirmed it works, stop the script with `Ctrl+C`.
+    6.  Create a new service file. **Replace `pi` with your username** if you changed it.
+        ```bash
+        sudo nano /etc/systemd/system/jukebox.service
+        ```
+    7.  Copy and paste the following content. Again, **replace `pi` with your username** in the `User` and `WorkingDirectory` lines.
+        ```ini
+        [Unit]
+        Description=Sonos NFC Jukebox Service
+        After=network.target
+
+        [Service]
+        User=pi
+        WorkingDirectory=/home/pi
+        ExecStart=/usr/bin/python3 /home/pi/jukebox.py
+        Restart=always
+
+        [Install]
+        WantedBy=multi-user.target
+        ```
+    8.  Save and exit (`Ctrl+X`, `Y`, `Enter`).
+
+    **Enable and Manage the Service**
+
+    1.  Enable the service to start on boot:
+        ```bash
+        sudo systemctl enable jukebox.service
+        ```
+    2.  Start the service now:
+        ```bash
+        sudo systemctl start jukebox.service
+        ```
+    3.  You can check its status to see if it's running correctly:
+        ```bash
+        sudo systemctl status jukebox.service
+        ```
+    4.  To see the live log output from your script, you can use:
+        ```bash
+        journalctl -fu jukebox.service
+        ```
+    5.  Press `Ctrl+C` to exit the log view.
 
 ## Programming the NFC Tags
 
@@ -104,6 +162,12 @@ Use a smartphone app (like NFC Tools) to write URL records to your NFC tags.
 *   `pi_setup.html`: Detailed instructions for setting up the Raspberry Pi hardware and software.
 *   `web_app_setup.html`: Detailed instructions for setting up the web application.
 
+## Future Improvements
+
+*   Add support for physical stop and volume buttons.
+*   Add light and buzzer support to notify of successful NFC taps prior to music starting.
+*   Add LCD screen support for "now playing" information.
+
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+This project is licensed under the GPL-3.0 License. See the `LICENSE` file for details.

@@ -1,0 +1,102 @@
+<?php
+require_once 'config.php';
+require_once 'token_manager.php';
+
+// --- Helper Function to Find Group ID ---
+function getGroupIdByPlayerName($householdId, $playerName, $accessToken) {
+    $groupsUrl = "https://api.ws.sonos.com/control/api/v1/households/{$householdId}/groups";
+    $options = [
+        'http' => [
+            'header'  => "Authorization: Bearer " . $accessToken,
+            'method'  => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+    $context = stream_context_create($options);
+    $groupsResponse = file_get_contents($groupsUrl, false, $context);
+    $groupsData = json_decode($groupsResponse, true);
+
+    if (isset($groupsData['players'])) {
+        $playerId = null;
+        foreach ($groupsData['players'] as $player) {
+            if ($player['name'] === $playerName) {
+                $playerId = $player['id'];
+                break;
+            }
+        }
+
+        if ($playerId && isset($groupsData['groups'])) {
+            foreach ($groupsData['groups'] as $group) {
+                if (in_array($playerId, $group['playerIds'])) {
+                    return $group['id'];
+                }
+            }
+        }
+    }
+    return null; // Player or group not found
+}
+
+// --- Step 1: Authentication ---
+try {
+    $tokenManager = new SonosTokenManager(SONOS_CLIENT_ID, SONOS_CLIENT_SECRET, TOKEN_FILE_PATH);
+    $accessToken = $tokenManager->getAccessToken();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "Error retrieving access token: " . htmlspecialchars($e->getMessage());
+    exit;
+}
+
+// --- Step 2: Find the correct Group ID dynamically ---
+$groupId = getGroupIdByPlayerName(SONOS_HOUSEHOLD_ID, SONOS_PLAYER_NAME, $accessToken);
+
+if (!$groupId) {
+    http_response_code(404);
+    echo "Error: Could not find a group containing the player named '" . htmlspecialchars(SONOS_PLAYER_NAME) . "'. Is the speaker online?";
+    exit;
+}
+
+// --- Step 3: Pause Command ---
+$url = "https://api.ws.sonos.com/control/api/v1/groups/{$groupId}/playback/pause";
+
+$postData = '{}'; // Empty JSON object
+
+$options = [
+    'http' => [
+        'header'  => "Content-type: application/json\r\n" .
+                     "Authorization: Bearer " . $accessToken,
+        'method'  => 'POST',
+        'content' => $postData,
+        'ignore_errors' => true
+    ]
+];
+
+$context = stream_context_create($options);
+$result = file_get_contents($url, false, $context);
+
+// --- Step 4: User Feedback ---
+$success = false;
+if (isset($http_response_header)) {
+    foreach ($http_response_header as $header) {
+        if (preg_match('/^HTTP\/\d\.\d\s+2(\d{2})\s+.*/', $header)) {
+            $success = true;
+            break;
+        }
+    }
+}
+
+echo '<!DOCTYPE html>';
+echo '<html><head><title>Sonos Jukebox</title><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body>';
+echo '<div style="font-family: sans-serif; text-align: center; padding-top: 50px;">';
+
+if ($success) {
+    echo '<h1>Playback Paused</h1>';
+    echo '<p style="font-size: 1.2em;">The music has been stopped on ' . htmlspecialchars(SONOS_PLAYER_NAME) . '.</p>';
+} else {
+    echo '<h1>Error</h1>';
+    echo '<p>Could not stop the music. There was an issue with the Sonos API.</p>';
+    echo '<pre>' . htmlspecialchars($result) . '</pre>';
+}
+
+echo '</div></body></html>';
+
+?>

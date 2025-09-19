@@ -1,0 +1,7 @@
+# Ignore my private config file and documentation
+config.php
+pi_setup.html
+web_app_setup.html
+switch_script.py
+favorites_map.json
+
